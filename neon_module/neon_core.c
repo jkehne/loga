@@ -99,6 +99,7 @@ neon_dev_init(unsigned int id,
   // the preceeding type-castings have been found to be correct
   // in our traces;
   unsigned long bar0_addr    = (unsigned long) dev_info[0];
+  unsigned long bar0_size    = (unsigned long) dev_info[1];
   unsigned long bar1_addr    = (unsigned long) dev_info[2];
   unsigned int  vendor_id    = (unsigned int)  dev_info[4];
   unsigned int  device_id    = (unsigned int)  dev_info[5];
@@ -128,6 +129,22 @@ neon_dev_init(unsigned int id,
     dev->refc_eval = tesla_refc_eval;
   }
   else if(vendor_id == NVIDIA_VENDOR &&
+          device_id == GTX480_DEVICE_ID &&
+          subsystem_id == GTX480_SUBSYSTEM) {
+    dev->nchan = GTX480_CHANNELS;
+    dev->reg_base = bar1_addr + NEON_FERMI_CHANNEL_BASE;
+    dev->reg_ofs  = NEON_FERMI_CHANNEL_OFFSET;
+    dev->refc_eval = kepler_refc_eval;
+  }
+  else if(vendor_id == NVIDIA_VENDOR &&
+          device_id == TITAN_BLACK_DEVICE_ID &&
+          subsystem_id == TITAN_BLACK_SUBSYSTEM) {
+    dev->nchan = TITAN_BLACK_CHANNELS;
+    dev->reg_base = bar1_addr + NEON_KEPLER_CHANNEL_BASE;
+    dev->reg_ofs  = NEON_KEPLER_CHANNEL_OFFSET;
+    dev->refc_eval = kepler_refc_eval;
+  }
+  else if(vendor_id == NVIDIA_VENDOR &&
           device_id == NVS295_DEVICE_ID &&
           subsystem_id == NVIDIA_SUBSYSTEM) {
     dev->nchan = NVS295_CHANNELS;
@@ -140,7 +157,9 @@ neon_dev_init(unsigned int id,
                vendor_id, device_id, subsystem_id);
     return -1;
   }
-  
+
+  dev->bar0 = ioremap_nocache(bar0_addr, bar0_size);
+
   // init channel alive bmp_sub2comp
   dev->bmp_sub2comp = (long *) kzalloc(BITS_TO_LONGS(dev->nchan) *       \
                               sizeof(long), GFP_KERNEL);
@@ -212,6 +231,8 @@ neon_dev_fini(neon_dev_t * const dev)
     kfree(dev->chan);
   } else
     neon_warning("dev %d : busy at fini", dev->id);
+
+  iounmap(dev->bar0);
 
   return ret;
 }

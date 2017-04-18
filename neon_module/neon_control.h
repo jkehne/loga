@@ -78,6 +78,8 @@ typedef struct _neon_task_t_ {
   unsigned int malicious;
   // number of contexts
   unsigned long nctx;
+  // actually shared spinlock
+  spinlock_t lock;
   // list of contexts
   neon_ctx_t ctx_list;
 } neon_task_t;

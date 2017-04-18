@@ -37,6 +37,14 @@
 #define ZOTAC_SUBSYSTEM   0x1265  // pci-probe, lspci -v
 #define GTX670_DEVICE_ID  0x1189  // pci-probe, lspci -v
 #define GTX670_CHANNELS   0x60    // via testing
+// Titan Black
+#define TITAN_BLACK_SUBSYSTEM   0x84b7  // pci-probe, lspci -v
+#define TITAN_BLACK_DEVICE_ID  0x100c  // pci-probe, lspci -v
+#define TITAN_BLACK_CHANNELS   0xFF    // via testing
+// GTX480
+#define GTX480_SUBSYSTEM  0x75f
+#define GTX480_DEVICE_ID  0x6c0
+#define GTX480_CHANNELS   0x60
 // GTX275
 #define EVGA_SUBSYSTEM    0x1171 // pci-probe, lspci -v
 #define GTX275_DEVICE_ID  0x5e6  // pci-probe, lspci -v
@@ -78,6 +86,8 @@
 
 // command buffer sizes
 #define NEON_RCB_SIZE_COMPUTE       0x00402000
+#define NEON_TITAN_BLACK_RB_SIZE_COMPUTE       0x00020000
+#define NEON_TITAN_BLACK_CB_SIZE_COMPUTE       0x00400000
 #define NEON_RB_SIZE_COMPUTE        0x00002000
 #define NEON_RB_SIZE_GRAPHICS       0x00040000
 #define NEON_RB_PAGEOFS             0x8c
@@ -85,6 +95,8 @@
 // dev channel offset
 #define NEON_TESLA_CHANNEL_BASE    0xc00000
 #define NEON_TESLA_CHANNEL_OFFSET  0x2000
+#define NEON_FERMI_CHANNEL_BASE    0x7ee0000
+#define NEON_FERMI_CHANNEL_OFFSET  0x1000
 #define NEON_KEPLER_CHANNEL_BASE   0x7d60000
 #define NEON_KEPLER_CHANNEL_OFFSET 0x200
 

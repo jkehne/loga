@@ -60,6 +60,8 @@ typedef struct _neon_dev_t_ {
   long *bmp_sub2comp;
   // protect this struct (essentially "all channels")
   spinlock_t lock;
+  // Pointer to remapped bar0 for raw device access
+  void __iomem *bar0;
 } neon_dev_t;
 
 /**************************************************************************/

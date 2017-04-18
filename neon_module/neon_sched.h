@@ -21,9 +21,9 @@
 
 // polling thresholds
 #define NEON_POLLING_T_MIN              1 //    1 mSec
-#define NEON_POLLING_T_MAX           1000 //    1  Sec
-#define NEON_POLLING_T_DEFAULT          1 //    1 mSec
-#define NEON_MALICIOUS_T_DEFAULT    60000 //   60  Sec
+#define NEON_POLLING_T_MAX        1000000 //    1  Sec
+#define NEON_POLLING_T_DEFAULT    1000 //    1 mSec
+#define NEON_MALICIOUS_T_DEFAULT    60000000 //   60  Sec
 
 extern wait_queue_head_t neon_kthread_event_wait_queue;
 

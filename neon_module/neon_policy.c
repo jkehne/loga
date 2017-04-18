@@ -25,13 +25,15 @@
 static neon_policy_face_t *policy_face[NEON_POLICIES] = {
   &neon_policy_fcfs,       // NEON_POLICY_FCFS
   &neon_policy_timeslice,  // NEON_POLICY_TIMESLICE
-  &neon_policy_sampling    // NEON_POLICY_SAMPLING
+  &neon_policy_sampling,   // NEON_POLICY_SAMPLING
+  &neon_policy_eventp      // NEON_POLICY_EVENT
 };
 
 static char neon_policy_name[NEON_POLICIES+1][NAME_LEN] = {
   {'f', 'c', 'f', 's', '\0',  0,   0,   0 ,   0,    0 },
   {'t', 'i', 'm', 'e', 's',  'l', 'i', 'c',   'e', '\0'},
-  {'s', 'a', 'm', 'p', 'l',  'i', 'n', 'g',   '\0', 0}
+  {'s', 'a', 'm', 'p', 'l',  'i', 'n', 'g',   '\0', 0},
+  {'e', 'v', 'e', 'n', 't',  '\0', 0,   0,    0,    0}
 };
 
 /***************************************************************************/
@@ -269,7 +271,7 @@ neon_policy_start(neon_work_t * const neon_work)
 
   memset(sched_work, 0, sizeof(sched_work_t));
 
-  write_lock(&sched_dev->lock);
+  write_lock_irqsave(&sched_dev->lock, sched_dev->flags);
   sched_work->neon_work = neon_work;
   sched_work->id = cid;
   sched_work->pid = pid;
@@ -279,7 +281,7 @@ neon_policy_start(neon_work_t * const neon_work)
   // mark work as started
   set_bit(cid, sched_task->bmp_start2stop);
   neon_info("did %d : cid %d : pid %d : policy start", did, cid, pid);
-  write_unlock(&sched_dev->lock);
+  write_unlock_irqrestore(&sched_dev->lock, sched_dev->flags);
 
   return 0;
 }
@@ -328,7 +330,7 @@ neon_policy_stop(const neon_work_t * const neon_work)
                sched_work->wait_dt, sched_work->nrqst > 0 ?       \
                sched_work->wait_dt/sched_work->nrqst : 0);
 
-  write_lock(&sched_dev->lock);
+  write_lock_irqsave(&sched_dev->lock, sched_dev->flags);
   // notify scheduling policy this work in this task is stopping
   select_policy->stop(sched_dev, sched_work, sched_task);
   // reset sched-work to avoid misunderstandings by concurrently
@@ -351,7 +353,7 @@ neon_policy_stop(const neon_work_t * const neon_work)
     kfree(sched_task);
   }
 
-  write_unlock(&sched_dev->lock);
+  write_unlock_irqrestore(&sched_dev->lock, sched_dev->flags);
 
   return 0;
 }
@@ -375,7 +377,8 @@ neon_policy_submit(const neon_work_t * const neon_work)
   unsigned long exe_dt      = 0;
 
   // find respective sched-task
-  read_lock(&sched_dev->lock);
+    local_irq_enable();
+    read_lock(&sched_dev->lock);
   list_for_each_entry(stask, &sched_dev->stask_list.entry, entry) {
     if(stask->pid == pid) {
       sched_task = stask;
@@ -383,13 +386,14 @@ neon_policy_submit(const neon_work_t * const neon_work)
     }
   }
   read_unlock(&sched_dev->lock);
+    local_irq_disable();
   if(sched_task == NULL) {
     neon_error("%s : did %d : cid %d : pid %d : submit without task",
                __func__, did, cid, pid);
     return -1;
   }
 
-  write_lock(&sched_dev->lock);
+  write_lock_irqsave(&sched_dev->lock, sched_dev->flags);
 
   getnstimeofday(&now_ts);
 
@@ -425,7 +429,7 @@ neon_policy_submit(const neon_work_t * const neon_work)
 #endif // NEON_USE_TIMESLICE
 #endif // NEON_USE_SAMPLING
 
-  write_unlock(&sched_dev->lock);
+  write_unlock_irqrestore(&sched_dev->lock, sched_dev->flags);
 
   return 0;
 }
@@ -526,7 +530,7 @@ neon_policy_complete(unsigned int did,
   sched_task->exe_dt += sched_work->exe_dt;
   sched_task->wait_dt += sched_work->wait_dt;
 
-  write_lock(&sched_dev->lock);
+  write_lock_irqsave(&sched_dev->lock, sched_dev->flags);
 
   select_policy->complete(sched_dev, sched_work, sched_task);
 
@@ -537,7 +541,7 @@ neon_policy_complete(unsigned int did,
             sched_work->nrqst, sched_task->exe_dt,
             sched_work->exe_dt, exe_dt, sched_work->wait_dt);
 
-  write_unlock(&sched_dev->lock);
+  write_unlock_irqrestore(&sched_dev->lock, sched_dev->flags);
 
   return;
 }

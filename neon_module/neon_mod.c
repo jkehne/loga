@@ -593,6 +593,8 @@ neon_copy_task(unsigned long clone_flags,
   if(neon_task == NULL)
     goto copy_task_end;
 
+  spin_lock(&neon_task->lock);
+
   // if this is a CLONE request (i.e. a new thread, but not a new process),
   // then share neon_task
   if(clone_flags & CLONE_VM) {
@@ -604,6 +606,7 @@ neon_copy_task(unsigned long clone_flags,
     cpu_task->neon_task = (void *) neon_task;
   }
 
+  spin_unlock(&neon_task->lock);
  copy_task_end :
   write_unlock(&cpu_task->neon_task_rwlock);
 
@@ -627,6 +630,7 @@ neon_exit_task(struct task_struct *cpu_task)
     return;
 
   write_lock(&cpu_task->neon_task_rwlock);
+  spin_lock(&neon_task->lock);
 
   // one less process in the family sharing this neon-task
   // if this was NOT the last task-struct associated with this
@@ -635,12 +639,14 @@ neon_exit_task(struct task_struct *cpu_task)
   if(neon_task->sharers-- > 0) {
     neon_debug("exit task - pid %d, neon_task 0x%p, sharers %d",
                (int) cpu_task->pid, neon_task, neon_task->sharers);
+    spin_unlock(&neon_task->lock);
     write_unlock(&cpu_task->neon_task_rwlock);
     return;
   }
 
   // clean up this task
   if(neon_task_fini(neon_task) < 0) {
+    spin_unlock(&neon_task->lock);
     write_unlock_irq(&cpu_task->neon_task_rwlock);
     neon_error("%s : failed to fini", __func__);
     return;
@@ -649,6 +655,7 @@ neon_exit_task(struct task_struct *cpu_task)
   cpu_task->neon_task = NULL;
   kfree(neon_task);
 
+  spin_unlock(&neon_task->lock);
   write_unlock_irq(&cpu_task->neon_task_rwlock);
 
   // main task exiting, sharers == 0;

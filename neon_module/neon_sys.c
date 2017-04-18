@@ -14,6 +14,8 @@
 #include "neon_control.h"
 #include "neon_sys.h"
 
+#define SUBC_MASK (7 << 13)
+
 typedef enum {
   RQST_PRE_MAPIN,
   RQST_POST_MMAP,
@@ -367,6 +369,39 @@ neon_rqst_post_gpuview(int cmd_nr, void *pre_cmd_val, void *post_cmd_val)
   return ret;
 }
 
+static struct page *neon_resolve_page(struct vm_area_struct *vma,
+				      const unsigned long ptr)
+{
+  pgd_t *pgd = 0;
+  pud_t *pud = 0;
+  pmd_t *pmd = 0;
+  pte_t *ptep = 0;
+  struct mm_struct *mm = vma->vm_mm;
+
+  pgd = pgd_offset(mm, ptr);
+  if (pgd_none(*pgd) || pgd_bad(*pgd)) {
+    neon_error("%s: bad pgd 0x%lx", __func__, *pgd);
+    return (struct page *)-1;
+  }
+  pud = pud_offset(pgd, ptr);
+  if (pud_none(*pud) || pud_bad(*pud)) {
+    neon_error("%s: bad pud 0x%lx", __func__, *pud);
+    return (struct page *)-1;
+  }
+  pmd = pmd_offset(pud, ptr);
+  if (pmd_none(*pmd) || pmd_bad(*pmd)) {
+    neon_error("%s: bad pmd 0x%lx", __func__, *pmd);
+    return (struct page *)-1;
+  }
+  ptep = pte_offset_map(pmd, ptr);
+  if (pte_none(*ptep)) {
+    neon_error("%s: bad pte 0x%lx", __func__, *ptep);
+    return (struct page *)-1;
+  }
+  
+  return pte_page(*ptep);
+}
+
 /***************************************************************************/
 // neon_uptr_read
 /***************************************************************************/
@@ -389,7 +424,17 @@ neon_uptr_read(const unsigned int pid,
     return val;
   }
 
-  page     = neon_follow_page(vma, ptr);
+  page = neon_resolve_page(vma, ptr);
+  if (unlikely(page == (struct page *)-1)) {
+#ifdef CONFIG_MM_OWNER
+    if (vma->vm_mm->owner)
+      neon_error("could not resolve address 0x%lx for pid %d", ptr, vma->vm_mm->owner->tgid);
+    else
+#endif
+    neon_error("could not resolve address 0x%lx", ptr);
+    return -1;
+  }
+  
   page_ofs = ptr & ~PAGE_MASK;
   if(page_ofs + sizeof(int) <= PAGE_SIZE) {
     // we choose vm_map_ramp over get_user_pages+kmap only to be on the
@@ -451,7 +496,12 @@ tesla_refc_eval(const unsigned int cb_pid,
       refc_addr_val[0] = neon_uptr_read(cb_pid, cb_vma,
                                         ptr + 2 * sizeof(int));
       refc_addr_val[1] = neon_uptr_read(cb_pid, cb_vma,
-                                        ptr + 3 * sizeof(int));    
+                                        ptr + 3 * sizeof(int));
+      if (unlikely((refc_addr_val[0] == -1) || (refc_addr_val[1] == -1))) {
+	refc_addr_val[0] = 0xdead;
+	refc_addr_val[1] = 0xbeef;
+	return -1;
+      }
     } else {
       if(cmd_size - 0x6 < 8 * sizeof(int)) {
         refc_addr_val[0]=0x2B16;
@@ -465,6 +515,11 @@ tesla_refc_eval(const unsigned int cb_pid,
                                           ptr + 2 * sizeof(int));
         refc_addr_val[1] = neon_uptr_read(cb_pid, cb_vma,
                                           ptr + 3 * sizeof(int));    
+	if (unlikely((refc_addr_val[0] == -1) || (refc_addr_val[1] == -1))) {
+	  refc_addr_val[0] = 0xdead;
+	  refc_addr_val[1] = 0xbeef;
+	  return -1;
+	}
       } else {
         refc_addr_val[0]=0xDEAD;
         refc_addr_val[1]=0xC0DE;
@@ -511,12 +566,17 @@ kepler_refc_eval(const unsigned int cb_pid,
     }
     ptr = cmd_end - 4 * sizeof(int);
     val = neon_uptr_read(cb_pid, cb_vma, ptr);
-    if(val == 0x200426c0) {
+    if((val & ~SUBC_MASK) == 0x200406c0) {
       top    = neon_uptr_read(cb_pid, cb_vma, ptr + 1 * sizeof(int));
       bottom = neon_uptr_read(cb_pid, cb_vma, ptr + 2 * sizeof(int));
       refc_addr_val[0] = (bottom | (top << (8 * sizeof(int))));
       refc_addr_val[1] = neon_uptr_read(cb_pid, cb_vma,
                                         ptr + 3 * sizeof(int));
+      if (unlikely((refc_addr_val[0] == -1) || (refc_addr_val[1] == -1))) {
+	refc_addr_val[0] = 0xdead;
+	refc_addr_val[1] = 0xbeef;
+	return -1;
+      }
 #ifdef NEON_KERNEL_CALL_COUNTING
       // this invariance appears to be associated specifically
       // with compute requests ---- they happen in triplets,
@@ -535,7 +595,7 @@ kepler_refc_eval(const unsigned int cb_pid,
       }
       ptr = cmd_end - 7 * sizeof(int);
       val = neon_uptr_read(cb_pid, cb_vma, ptr);
-      if(val == 0x20018090) {
+      if((val & ~SUBC_MASK) == 0x20010090) {
         top    = neon_uptr_read(cb_pid, cb_vma,
                                 ptr + 1 * sizeof(int));
         bottom = neon_uptr_read(cb_pid, cb_vma,
@@ -543,8 +603,13 @@ kepler_refc_eval(const unsigned int cb_pid,
         refc_addr_val[0] = (bottom | (top << (8 * sizeof(int))));
         refc_addr_val[1] = neon_uptr_read(cb_pid, cb_vma,
                                           ptr + 5 * sizeof(int));
+	if (unlikely((refc_addr_val[0] == -1) || (refc_addr_val[1] == -1))) {
+	  refc_addr_val[0] = 0xdead;
+	  refc_addr_val[1] = 0xbeef;
+	  return -1;
+	}
       } else {
-        if(val == 0x200180c0) {
+        if((val & ~SUBC_MASK) == 0x200100c0) {
           if(cmd_size - 0x6 < 13 * sizeof(int)) {
             refc_addr_val[0]=0x22B16;
             refc_addr_val[1]=0xB00B1E5;
@@ -558,6 +623,11 @@ kepler_refc_eval(const unsigned int cb_pid,
           refc_addr_val[0] = (bottom | (top << (8 * sizeof(int))));
           refc_addr_val[1] = neon_uptr_read(cb_pid, cb_vma,
                                             ptr + 5 * sizeof(int));
+	  if (unlikely((refc_addr_val[0] == -1) || (refc_addr_val[1] == -1))) {
+	    refc_addr_val[0] = 0xdead;
+	    refc_addr_val[1] = 0xbeef;
+	    return -1;
+	  }
         } else {
           refc_addr_val[0]=0xDEAD;
           refc_addr_val[1]=0xC0DE;
@@ -567,17 +637,17 @@ kepler_refc_eval(const unsigned int cb_pid,
     }
   } else if(workload == NEON_WORKLOAD_GRAPHICS) {
     cmd_end = cmd_start + cmd_size - 0x4;
-/* #ifdef NEON_DEBUG_LEVEL_5 */
-/*     if(cb_pid == current->pid) { */
-/*       unsigned int  i = 0; */
-/*       for ( i = 0; i  <  0x30 ; i += sizeof(int)) { */
-/*         ptr  = cmd_end - i; */
-/*         val  = *((unsigned int *) ptr); */
-/*         neon_verbose("----> steps 0x%ld : ptr 0x%lx : val 0x%lx ", */
-/*                      i, ptr, val); */
-/*       } */
-/*     } */
-/* #endif // NEON_DEBUG_LEVEL_5 */
+    /* #ifdef NEON_DEBUG_LEVEL_5 */
+    /*     if(cb_pid == current->pid) { */
+    /*       unsigned int  i = 0; */
+    /*       for ( i = 0; i  <  0x30 ; i += sizeof(int)) { */
+    /*         ptr  = cmd_end - i; */
+    /*         val  = *((unsigned int *) ptr); */
+    /*         neon_verbose("----> steps 0x%ld : ptr 0x%lx : val 0x%lx ", */
+    /*                      i, ptr, val); */
+    /*       } */
+    /*     } */
+    /* #endif // NEON_DEBUG_LEVEL_5 */
     if(cmd_size - 0x4 < 4 * sizeof(int)) {
       refc_addr_val[0]=0xB16;
       refc_addr_val[1]=0xB00B1E5;
@@ -585,12 +655,17 @@ kepler_refc_eval(const unsigned int cb_pid,
     }
     ptr = cmd_end - 4 * sizeof(int);
     val = neon_uptr_read(cb_pid, cb_vma, ptr);
-    if(val == 0x200406c0) {
+    if((val & ~SUBC_MASK) == 0x200406c0) {
       top    = neon_uptr_read(cb_pid, cb_vma, ptr + 1 * sizeof(int));
       bottom = neon_uptr_read(cb_pid, cb_vma, ptr + 2 * sizeof(int));
       refc_addr_val[0] = (bottom | (top << (8 * sizeof(int))));
       refc_addr_val[1] = neon_uptr_read(cb_pid, cb_vma,
                                         ptr + 3 * sizeof(int));
+      if (unlikely((refc_addr_val[0] == -1) || (refc_addr_val[1] == -1))) {
+	refc_addr_val[0] = 0xdead;
+	refc_addr_val[1] = 0xbeef;
+	return -1;
+      }
 #ifdef NEON_KERNEL_CALL_COUNTING
       // this invariance appears to be associated specifically
       // with compute requests 

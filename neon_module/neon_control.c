@@ -298,6 +298,7 @@ neon_task_init(unsigned int pid)
   task->malicious = 0;
   task->nctx = 0;
   INIT_LIST_HEAD(&task->ctx_list.entry);
+  spin_lock_init(&task->lock);
 
   neon_debug("neon init - new GPU-accessing task %d", task->pid);
 

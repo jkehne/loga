@@ -16,7 +16,7 @@ $(MODULE_NAME)-objs     := neon_mod.o neon_help.o \
 			   neon_track.o neon_sched.o \
 			   neon_policy.o neon_fcfs.o \
 			   neon_timeslice.o neon_sampling.o \
-			   neon_ui.o
+			   neon_event.o neon_ui.o
 
 # max debug level 4, 3 necessary for trace-report
 EXTRA_CFLAGS            := -I$(src) -DNEON_DEBUG_LEVEL_0
@@ -30,10 +30,15 @@ EXTRA_CFLAGS            += -I$(src)/../nvidia/kernel
 KBUILD_EXTRA_SYMBOLS    += $(src)/../nvidia/kernel/Module.symvers
 
 # track interface accesses
-EXTRA_CFLAGS   += -DNEON_LTTRACE
+# EXTRA_CFLAGS   += -DNEON_LTTRACE
 # EXTRA_CFLAGS   += -DNEON_TRACE_REPORT
 # EXTRA_CFLAGS   += -DNEON_USE_TIMESLICE
 # EXTRA_CFLAGS   += -DNEON_USE_SAMPLING
+EXTRA_CFLAGS	+= -DNEON_USE_EVENT
+
+# EXTRA_CFLAGS += -DLOGA_TRACE
+# EXTRA_CFLAGS += -DLOGA_TRACE_DEBUG
+# EXTRA_CFLAGS += -DNEON_USE_TRACE_PRINTK
 
 # Linux kernel source location
 MODULE_MODLIB := /lib/modules/$(shell uname -r)

@@ -9,6 +9,7 @@
 #define __NEON_HELP_H__
 
 #include <linux/printk.h>      // pr_
+#include <linux/sched.h>
 #include <stdarg.h>            // va_list
 
 /***************************************************************************/
@@ -26,7 +27,12 @@
 #define MASK_MAP_OFS(o)  (((o) & 0xff000000) >> 24)
 
 // NOTE: use neon_note_ts's DEBUG-enabled wrappers
+#ifndef NEON_USE_TRACE_PRINTK
 int neon_note(const char *fmt, ...); // a neon_help function
+#else
+#define neon_note(fmt, ...)			\
+  trace_printk(fmt "\n", ##__VA_ARGS__)
+#endif
 
 /***************************************************************************/
 // Debugging verbosity control
@@ -99,7 +105,7 @@ int neon_note(const char *fmt, ...); // a neon_help function
 
 #ifdef NEON_DEBUG_LEVEL_0
 #define neon_error(fmt, ...)                                    \
-  neon_note(KERN_ERR pr_fmt("NEON ERR : " fmt), ##__VA_ARGS__)
+  neon_note(KERN_ERR pr_fmt("NEON ERR : %s : " fmt), current->comm, ##__VA_ARGS__)
 #else // !NEON_DEBUG_LEVEL_0
 #define neon_error(fmt, ...)                    \
   while(0)
@@ -107,7 +113,7 @@ int neon_note(const char *fmt, ...); // a neon_help function
 
 #ifdef NEON_DEBUG_LEVEL_1
 #define neon_warning(fmt, ...)                                  \
-  neon_note(KERN_ERR pr_fmt("NEON WRN : " fmt), ##__VA_ARGS__)
+  neon_note(KERN_ERR pr_fmt("NEON WRN : %s : " fmt), current->comm, ##__VA_ARGS__)
 #else // !NEON_DEBUG_LEVEL_1
 #define neon_warning(fmt, ...)                  \
   while(0)
@@ -115,7 +121,7 @@ int neon_note(const char *fmt, ...); // a neon_help function
 
 #ifdef NEON_DEBUG_LEVEL_2
 #define neon_notice(fmt, ...)                                   \
-  neon_note(KERN_ERR pr_fmt("NEON NTC : " fmt), ##__VA_ARGS__)
+  neon_note(KERN_ERR pr_fmt("NEON NTC : %s : " fmt), current->comm, ##__VA_ARGS__)
 #else // !NEON_DEBUG_LEVEL_2
 #define neon_notice(fmt, ...)                   \
   while(0)
@@ -123,7 +129,7 @@ int neon_note(const char *fmt, ...); // a neon_help function
 
 #ifdef NEON_DEBUG_LEVEL_3
 #define neon_info(fmt, ...)                                     \
-  neon_note(KERN_ERR pr_fmt("NEON NFO : " fmt), ##__VA_ARGS__)
+  neon_note(KERN_ERR pr_fmt("NEON NFO : %s : " fmt), current->comm, ##__VA_ARGS__)
 #else // !NEON_DEBUG_LEVEL_3
 #define neon_info(fmt, ...)                     \
   while(0)
@@ -131,7 +137,7 @@ int neon_note(const char *fmt, ...); // a neon_help function
 
 #ifdef NEON_DEBUG_LEVEL_4
 #define neon_debug(fmt, ...)                                    \
-  neon_note(KERN_ERR pr_fmt("NEON DBG : " fmt), ##__VA_ARGS__)
+  neon_note(KERN_ERR pr_fmt("NEON DBG : %s : " fmt), current->comm, ##__VA_ARGS__)
 #else // !NEON_DEBUG_LEVEL_4
 #define neon_debug(fmt, ...)                    \
   while(0)
@@ -140,7 +146,7 @@ int neon_note(const char *fmt, ...); // a neon_help function
 #ifdef NEON_DEBUG_LEVEL_5
 
 #define neon_verbose(fmt, ...)                                  \
-  neon_note(KERN_ERR pr_fmt("NEON VRB : " fmt), ##__VA_ARGS__)
+  neon_note(KERN_ERR pr_fmt("NEON VRB : %s : " fmt), current->comm, ##__VA_ARGS__)
 #else // !NEON_DEBUG_LEVEL_5
 #define neon_verbose(fmt, ...)                    \
   while(0)
@@ -148,7 +154,7 @@ int neon_note(const char *fmt, ...); // a neon_help function
 
 #ifdef NEON_DEBUG_LEVEL_1
 #define neon_account(fmt, ...)                                  \
-  neon_note(KERN_ERR pr_fmt("NEON CNT : " fmt), ##__VA_ARGS__)
+  neon_note(KERN_ERR pr_fmt("NEON CNT : %s : " fmt), current->comm, ##__VA_ARGS__)
 #else // !NEON_DEBUG_LEVEL_1
 #define neon_account(fmt, ...)                  \
   while(0)
@@ -156,7 +162,7 @@ int neon_note(const char *fmt, ...); // a neon_help function
 
 #ifdef NEON_DEBUG_LEVEL_1
 #define neon_report(fmt, ...)                                   \
-  neon_note(KERN_ERR pr_fmt("NEON RPT : " fmt), ##__VA_ARGS__)
+  neon_note(KERN_ERR pr_fmt("NEON RPT : %s : " fmt), current->comm, ##__VA_ARGS__)
 #else // !NEON_DEBUG_LEVEL_1
 #define neon_report(fmt, ...)                   \
   while(0)
@@ -164,6 +170,6 @@ int neon_note(const char *fmt, ...); // a neon_help function
 
 // Temporary checks --- always on
 #define neon_urgent(fmt, ...)                                      \
-  neon_note(KERN_ERR pr_fmt("NEON URG : " fmt), ##__VA_ARGS__)
+  neon_note(KERN_ERR pr_fmt("NEON URG : %s : " fmt), current->comm, ##__VA_ARGS__)
 
 #endif  // __NEON_HELP_H__

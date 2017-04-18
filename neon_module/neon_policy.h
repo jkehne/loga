@@ -18,12 +18,14 @@
 #include "neon_fcfs.h"
 #include "neon_timeslice.h"
 #include "neon_sampling.h"
+#include "neon_event.h"
 
 // policy-specific work abstraction
 typedef union {
   fcfs_work_t fcfs;
   timeslice_work_t tslc;
   sampling_work_t smpl;
+  event_work_t evnt;
 } policy_work_t;
 
 // policy-specific task abstraction
@@ -31,6 +33,7 @@ typedef union {
   fcfs_task_t fcfs;
   timeslice_task_t tslc;
   sampling_task_t smpl;
+  event_task_t evnt;
 } policy_task_t;
 
 // policy-specific device abstraction
@@ -38,6 +41,7 @@ typedef union {
   fcfs_dev_t fcfs;
   timeslice_dev_t tslc;
   sampling_dev_t smpl;
+  event_dev_t evnt;
 } policy_dev_t;
 
 // scheduling policy ids
@@ -45,6 +49,7 @@ typedef enum {
   NEON_POLICY_FCFS,       // basic, set to DEFAULT
   NEON_POLICY_TIMESLICE,  // token-based timeslice
   NEON_POLICY_SAMPLING,   // sampling-based FQ
+  NEON_POLICY_EVENT,
   NEON_POLICIES           // # of supported policies
 } neon_policy_id_t;
 
@@ -62,6 +67,11 @@ typedef enum {
 #ifdef NEON_USE_SAMPLING
 #undef NEON_DEFAULT_POLICY
 #define NEON_DEFAULT_POLICY NEON_POLICY_SAMPLING
+#endif // NEON_USE_SAMPLING
+
+#ifdef NEON_USE_EVENT
+#undef NEON_DEFAULT_POLICY
+#define NEON_DEFAULT_POLICY NEON_POLICY_EVENT
 #endif // NEON_USE_SAMPLING
 
 /**************************************************************************/
@@ -101,6 +111,8 @@ typedef struct _sched_work_t_ {
   neon_work_t *neon_work;
   // policy-specific entries
   policy_work_t ps;
+  // linked list of work structs belonging to a task
+  struct list_head entry;
 } sched_work_t;
 
 // task abstraction used for scheduling
@@ -121,6 +133,8 @@ typedef struct _sched_task_t_ {
   policy_task_t ps;
   // entry in device's list of tasks
   struct list_head entry;
+  // linked list of work structs belonging to a task
+  sched_work_t sworks_list;
 } sched_task_t;
 
 // dev abstraction used for scheduling
@@ -135,6 +149,8 @@ typedef struct _sched_dev_t_ {
   policy_dev_t ps;
   // protect this struct
   rwlock_t lock;
+  // space to save interrupt flags while lock is held
+  unsigned long flags;
 } sched_dev_t;
 
 // event-based scheduling policy interface shared by all policies

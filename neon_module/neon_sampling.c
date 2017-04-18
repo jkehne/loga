@@ -130,8 +130,10 @@ update_vtimes(sched_dev_t  * const sched_dev)
   if(activity == 0)
     goto just_decide;
   // This is possible in combined opencl/gl situations
+#if 0
   if(unlikely(total_avg_exe_dt == 0))
     goto just_decide;
+#endif
 
   epoch_dt = sched_dev->DFQ(sampling_season_dt) * sampling_X;
 
@@ -818,10 +820,10 @@ submit_sampling(sched_dev_t  * const sched_dev,
     // that will block will consider issue-bit set
     clear_bit(sched_work->id, sched_task->bmp_issue2comp);
     sched_task->DFQ(sem_count)--;
-    write_unlock(&sched_dev->lock);
+    write_unlock_irqrestore(&sched_dev->lock, sched_dev->flags);
     // wait here
     down_interruptible(&sched_task->DFQ(sem));
-    write_lock(&sched_dev->lock);
+    write_lock_irqsave(&sched_dev->lock, sched_dev->flags);
   }
 
  just_submit:
@@ -1061,7 +1063,7 @@ event_sampling(void)
     getnstimeofday(&now_ts);
     ts = (unsigned long) (timespec_to_ns(&now_ts) / NSEC_PER_USEC);
 
-    write_lock(&sched_dev->lock);
+    write_lock_irqsave(&sched_dev->lock, sched_dev->flags);
 
     last_season = sched_dev->DFQ(season);
 
@@ -1202,7 +1204,7 @@ event_sampling(void)
         neon_error("%s : could not cancel sampling timer", __func__);
     }
 
-    write_unlock(&sched_dev->lock);
+    write_unlock_irqrestore(&sched_dev->lock, sched_dev->flags);
   }
 
   return;

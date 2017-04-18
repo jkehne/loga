@@ -139,7 +139,7 @@ neon_page_arming(unsigned int arm,
   }
 
   set_pte_atomic(page->pte, __pte(ptev));
-  __flush_tlb_one(page->addr);
+  flush_tlb_page(page->vma, page->addr);
 
   return;
 }
@@ -156,7 +156,6 @@ neon_trap_handler(unsigned long condition, struct pt_regs *regs)
   neon_ctx_t         *ctx       = NULL;
   neon_fault_t       *fault     = NULL;
   neon_map_t         *trap_map  = NULL;
-  neon_ctx_t         *trap_ctx  = NULL;
   neon_page_t        *trap_page = NULL;
 
   // skip if trap not concerning a neon-task (e.g. debug regular app)
@@ -174,7 +173,6 @@ neon_trap_handler(unsigned long condition, struct pt_regs *regs)
       unsigned long instructions = 0;
       unsigned long ip_next = instruction_pointer(regs);
       fault = list_first_entry(&ctx->fault_list.entry, neon_fault_t, entry);
-      trap_ctx = ctx;
       trap_map  = fault->map;
       trap_page = &trap_map->page[fault->page_num];
       instructions = (ip_next >> 8) - (fault->ip >> 8);
@@ -237,7 +235,9 @@ neon_trap_handler(unsigned long condition, struct pt_regs *regs)
 
   // re-arm to expect new fault, following scheduler's suggestion
   // as to whether this is necessary
-  if(neon_sched_reengage(trap_map) != 0) { 
+  // cannot call this with interrupts disabled
+  local_irq_enable();
+  if(neon_sched_reengage(trap_map) != 0) {
     neon_page_arming(1, trap_page);
     if(fault->siamese != 0) {
       neon_warning("rearming siamese pages 0x%lx, 0x%lx",
@@ -246,6 +246,7 @@ neon_trap_handler(unsigned long condition, struct pt_regs *regs)
       fault->siamese = 0;
     }
   }
+  local_irq_disable();
   
   regs->flags &= ~X86_EFLAGS_TF;
   regs->flags |= (fault->flags & (X86_EFLAGS_TF | X86_EFLAGS_IF));
@@ -319,6 +320,7 @@ neon_track_start(neon_map_t *const map)
   
   for(i = 0; i < np; i++) {
     map->page[i].addr = map->vma->vm_start + i * PAGE_SIZE;
+    map->page[i].vma = map->vma;
     if(neon_follow_pte(map->vma,
                        map->page[i].addr,
                        &map->page[i].pte) != 0) {

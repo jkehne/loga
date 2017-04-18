@@ -18,6 +18,8 @@
 /**************************************************************************/
 // A short trace-related message to appear either in some LTT buffer
 // or in the console
+
+#ifndef NEON_USE_TRACE_PRINTK
 int
 neon_note(const char *fmt, ...)
 {
@@ -51,3 +53,4 @@ neon_note(const char *fmt, ...)
 
   return 1;
 }
+#endif

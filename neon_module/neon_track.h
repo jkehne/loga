@@ -22,6 +22,8 @@ typedef struct _neon_page_t_ {
   pte_t *pte;
   // associated vaddr
   unsigned long addr;
+  // associated vma
+  struct vm_area_struct *vma;
   // per-cpu saved presence manipulation
   pteval_t saved_ptev;
   // boolean status (re-entrant)

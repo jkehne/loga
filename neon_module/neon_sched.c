@@ -109,7 +109,7 @@ polling_refc_update(void)
     // predefined number of periods, kill 'em
     dev = &neon_global.dev[did];
     likely_malicious = dev->nchan;
-    neon_debug("dev %d : sub2comp 0x%lx", did,
+    neon_verbose("dev %d : sub2comp 0x%lx", did,
               dev->bmp_sub2comp == NULL ? 0 : dev->bmp_sub2comp[0]);
     if(!__bitmap_empty(dev->bmp_sub2comp, dev->nchan)) {
       for_each_set_bit(cid, dev->bmp_sub2comp, dev->nchan) {
@@ -134,6 +134,14 @@ polling_refc_update(void)
                    "refc 0x%lx/0x%lx : sched_POLL",
                    did, cid, chan->pid, refc_val,
                    chan->refc_target);
+
+	if(unlikely(refc_val < 2)) {
+	  neon_debug("did %d : cid %d : pid %d : "
+		     "refc 0x%lx/0x%lx : sched_FORCE",
+		     did, cid, chan->pid, refc_val,
+		     chan->refc_target);
+	  complete = 1;
+	}
 
         if(refc_val >= chan->refc_target) {
           neon_debug("did %d : cid %d : pid %d : "
@@ -337,8 +345,10 @@ neon_sched_reset(unsigned int nctx)
     } else
       malicious_T = _malicious_T_;
 
-    polling_interval = ktime_set(0, polling_T * NSEC_PER_MSEC);
+    polling_interval = ktime_set(0, polling_T * NSEC_PER_USEC);
+#ifndef NEON_USE_EVENT
     hrtimer_start(&polling_timer, polling_interval, HRTIMER_MODE_REL);
+#endif
   } else {
     neon_error("%s : nctx %d : dunno what to do at this checkpoint",
                __func__, nctx);
@@ -458,7 +468,6 @@ update_work_cb_cmd(const struct _neon_ctx_t_ * const ctx,
                  map->mmio_gpu, map->size);
       if(map->mmio_gpu != 0 &&
          map->ctx_key == work->rb->ctx_key &&
-         map->dev_key == work->rb->dev_key &&
          cmd_mmio >= map->mmio_gpu &&
          cmd_mmio <  map->mmio_gpu + map->size) {
         work->cb = map;
@@ -516,7 +525,6 @@ update_work_rc(const struct _neon_ctx_t_ * const ctx,
                  map->mmio_gpu + map->size);
       if(map->mmio_gpu != 0 &&
          map->ctx_key == work->rb->ctx_key &&
-         map->dev_key == work->rb->dev_key &&
          refc_tuple[0] >= map->mmio_gpu &&
          refc_tuple[0] <  map->mmio_gpu + map->size) {
         work->rc = map;
@@ -553,7 +561,8 @@ neon_work_init(neon_task_t * const neon_task,
   // register-map in question must be referring to
   list_for_each_entry(m, &ctx->map_list.entry, entry) {
     if(m->size == NEON_RB_SIZE_GRAPHICS ||
-       m->size == NEON_RCB_SIZE_COMPUTE) {
+       m->size == NEON_RCB_SIZE_COMPUTE ||
+       m->size == NEON_TITAN_BLACK_RB_SIZE_COMPUTE) {
       rb = m;
       break;
     }
@@ -590,6 +599,7 @@ neon_work_init(neon_task_t * const neon_task,
     work->workload = NEON_WORKLOAD_GRAPHICS;
     break;
   case NEON_RCB_SIZE_COMPUTE:
+  case NEON_TITAN_BLACK_RB_SIZE_COMPUTE:
     work->workload = NEON_WORKLOAD_COMPUTE;
     break;
   default :
